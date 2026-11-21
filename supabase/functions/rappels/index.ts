@@ -68,6 +68,13 @@ Deno.serve(async req => {
   ]);
   CONF = regles;
   if (!CONF.email_expediteur || !env('EMAIL_API_KEY')) return Response.json({ erreur: 'Envoi des emails non configuré (expéditeur ou clé API manquants).' }, { status: 500 });
+  // Mode test : un seul email à l'adresse indiquée, rien d'autre
+  if (corps.test) {
+    try {
+      await envoyer(String(corps.test), 'Test – Pointage du cabinet', `Bonjour,\n\nCeci est un email de test de l'application de pointage, envoyé le ${n.jour} à ${n.heure}.\n\nSi vous le lisez, l'envoi des rappels fonctionne.`);
+      return Response.json({ ok: true, test: corps.test, expediteur: CONF.email_expediteur });
+    } catch (e) { return Response.json({ erreur: String(e) }, { status: 502 }); }
+  }
   const actif = (m: any) => !m.date_fin || m.date_fin >= aujourdhui;
   const profil = (id: string) => (profils ?? []).find(p => p.id === id);
   const admins = (profils ?? []).filter(p => p.admin);
