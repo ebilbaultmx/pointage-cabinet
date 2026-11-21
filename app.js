@@ -195,35 +195,40 @@ function render() {
 
   let tabs;
   if (gestionnaire()) {
-    tabs = [['suivi', 'Suivi'], ['semaine', 'Semaine'], ['alertes', 'Alertes'], ['absences', 'Absences'], ['contrat', 'Contrat et agenda'], ['journal', 'Journal']];
+    // Comme la version simple : trois onglets ; le reste est derrière le bouton « Réglages »
+    tabs = [['suivi', 'Suivi'], ['semaine', 'Semaine'], ['absences', 'Absences']];
     if (monContrat()) tabs.unshift(['pointer', 'Mon pointage']);
-    if (S.moi.admin) tabs.push(['admin', 'Administration']);
   } else tabs = [['pointer', 'Pointer'], ['semaine', 'Semaine'], ['absences', 'Absences'], ['historique', 'Historique']];
-  if (!tabs.find(t => t[0] === S.tab)) S.tab = tabs[0][0];
+  if (!tabs.find(t => t[0] === S.tab) && !(gestionnaire() && S.tab === 'reglages')) S.tab = tabs[0][0];
   $('tabs').innerHTML = tabs.map(([k, l]) => `<button onclick="setTab('${k}')" class="btn whitespace-nowrap ${S.tab === k ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}">${l}</button>`).join('');
+  $('choix').innerHTML = '';
 
-  $('choix').innerHTML = gestionnaire() && !['admin', 'pointer'].includes(S.tab) ? vChoix() : '';
-  if (S.tab === 'admin') { $('banner').innerHTML = ''; $('view').innerHTML = vAdmin(); return; }
+  if (S.tab === 'reglages') { $('banner').innerHTML = ''; $('view').innerHTML = vReglages(); return; }
   if (!S.sel) {
     $('banner').innerHTML = '';
-    $('view').innerHTML = `<section class="bg-white rounded-2xl border border-slate-200 p-5 text-sm">Aucun salarié n’est encore rattaché à cet employeur.${S.moi.admin ? ' Utilisez l’onglet Administration pour inviter une personne.' : ''}</section>`;
+    $('view').innerHTML = `<section class="bg-white rounded-2xl border border-slate-200 p-5 text-sm space-y-3">${empGeres().length > 1 ? choixPersonne(false) : ''}
+      <p>Aucun salarié n’est encore rattaché à cet employeur.</p>
+      ${S.moi.admin ? `<button class="btn bg-teal-600 text-white" onclick="ouvrirReglages('personnes')">Inviter une personne</button>` : ''}</section>`;
     return;
   }
   renderBanniere();
-  const vues = { pointer: vPointer, semaine: vSemaine, absences: vAbs, historique: vHistorique, suivi: vSuivi, alertes: vAlertes, contrat: vContrat, journal: vJournal };
+  const vues = { pointer: vPointer, semaine: vSemaine, absences: vAbs, historique: vHistorique, suivi: vSuivi };
   $('view').innerHTML = vues[S.tab]();
   tick();
 }
 
-function vChoix() {
+/** Choix de l'employeur (seulement s'il y en a plusieurs), de la personne et, au besoin, du mois. */
+function choixPersonne(avecMois) {
   const emps = empGeres();
   const sal = salariesDe(S.emp);
   const opts = sal.map(m => `<option value="${m.profil}" ${m.profil === S.sel ? 'selected' : ''}>${esc(nom(m.profil))}${actif(m) ? '' : ' (sorti le ' + fdl(m.date_fin) + ')'}</option>`);
-  if (monContrat() && S.sel === S.moi.id) opts.unshift(`<option value="${S.moi.id}" selected>Moi</option>`);
-  return `<div class="mb-3 grid grid-cols-2 gap-3">
-    <div><label>Employeur</label><select onchange="choisirEmployeur(this.value)">${emps.map(e => `<option value="${e.id}" ${e.id === S.emp ? 'selected' : ''}>${esc(e.nom)}</option>`).join('')}</select></div>
-    <div><label>Salarié(e)</label><select onchange="choisirSalarie(this.value)" ${opts.length ? '' : 'disabled'}>${opts.join('') || '<option>Aucun</option>'}</select></div></div>`;
+  if (monContrat()) opts.unshift(`<option value="${S.moi.id}" ${S.sel === S.moi.id ? 'selected' : ''}>Moi</option>`);
+  return `${emps.length > 1 ? `<div class="mb-3"><label>Employeur</label><select onchange="choisirEmployeur(this.value)">${emps.map(e => `<option value="${e.id}" ${e.id === S.emp ? 'selected' : ''}>${esc(e.nom)}</option>`).join('')}</select></div>` : ''}
+    <div class="grid grid-cols-2 gap-3"><div ${avecMois ? '' : 'class="col-span-2"'}><label>Personne</label><select onchange="choisirSalarie(this.value)" ${opts.length ? '' : 'disabled'}>${opts.join('') || '<option>Aucune</option>'}</select></div>
+    ${avecMois ? `<div><label>Mois</label><input type="month" value="${S.mois}" onchange="choisirMois(this.value)"></div>` : ''}</div>`;
 }
+/** Rappel discret de la personne affichée, sur les onglets Semaine et Absences. */
+const lignePersonne = () => gere() ? `<p class="text-sm text-slate-500 mb-3">Heures de <b class="text-slate-700">${esc(nom(S.sel))}</b> · <button class="underline" onclick="setTab('suivi')">changer</button></p>` : '';
 
 function renderBanniere() {
   const P = params();
@@ -232,7 +237,7 @@ function renderBanniere() {
   if (mm.length) h += `<div class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm">
     <b>⏰ ${gere() ? esc(nom(S.sel)) + ' n’a pas complété ses horaires' : 'Rappel : horaires non saisis ou incomplets'}</b> (${mm.length} jour${mm.length > 1 ? 's' : ''}) :
     ${mm.slice(0, 8).map(m => `<button class="underline mx-1" onclick="dlgJour('${m.jour}')">${fd(m.jour)}${m.motif === 'incomplet' ? ' (incomplet)' : ''}</button>`).join('')}</div>`;
-  if (gere() && !S.versions.length) h += `<div class="mb-4 rounded-xl border border-sky-300 bg-sky-50 p-3 text-sm">L’agenda type n’est pas renseigné : les écarts avec le planning ne peuvent pas être calculés. <button class="underline" onclick="setTab('contrat')">Le renseigner</button></div>`;
+  if (gere() && !S.versions.length) h += `<div class="mb-4 rounded-xl border border-sky-300 bg-sky-50 p-3 text-sm">L’agenda type n’est pas renseigné : les écarts avec le planning ne peuvent pas être calculés. <button class="underline" onclick="ouvrirReglages('contrat')">Le renseigner</button></div>`;
   $('banner').innerHTML = h;
 }
 
@@ -350,7 +355,7 @@ function vSemaine() {
       <td class="text-right font-semibold whitespace-nowrap">${a.vide ? '–' : R.duree(a.travail)}</td></tr>`;
   }).join('');
   const hebdo = al.filter(x => x.jour === S.wk && ['max_semaine', 'moyenne_12s', 'repos_hebdo', 'heures_sup'].includes(x.regle));
-  return `<section class="bg-white rounded-2xl border border-slate-200 p-4">
+  return `<section class="bg-white rounded-2xl border border-slate-200 p-4">${lignePersonne()}
    <div class="flex items-center justify-between mb-3"><button class="btn bg-slate-100 !py-1.5" onclick="semainePrec()">‹</button>
    <div class="text-center font-semibold">Semaine du ${fd(S.wk)}<div class="text-xs font-normal text-slate-500">au ${fd(R.ajouterJours(S.wk, 6))}</div></div>
    <button class="btn bg-slate-100 !py-1.5" onclick="S.wk=R.ajouterJours(S.wk,7);render()">›</button></div>
@@ -371,7 +376,7 @@ async function semainePrec() { S.wk = R.ajouterJours(S.wk, -7); await assurer(S.
 function vAbs() {
   const list = S.abs.slice().sort((a, b) => b.du.localeCompare(a.du));
   return `<section class="bg-white rounded-2xl border border-slate-200 p-4">
-   <h2 class="font-semibold mb-3">Déclarer une absence${gere() ? ' pour ' + esc(nom(S.sel)) : ''}</h2>
+   ${lignePersonne()}<h2 class="font-semibold mb-3">Déclarer une absence</h2>
    <div class="grid grid-cols-2 gap-3">
     <div class="col-span-2"><label>Motif</label><select id="a-t">${TYPES_ABS.map(t => `<option>${t}</option>`).join('')}</select></div>
     <div><label>Du</label><input id="a-f" type="date" value="${auj()}"></div>
@@ -414,66 +419,88 @@ async function choisirMois(m) { if (!m) return; S.mois = m; const b = bornesMois
 function vSuivi() {
   if (!S.du) { const b = bornesMois(S.mois); S.du = b.du; S.au = b.au; }
   const { du, au } = bornesMois(S.mois), EPJ = evtsParJour(), P = params();
-  let tot = 0, prevu = 0, abd = 0, rows = '';
+  let tot = 0, abd = 0, rows = '';
   for (let d = du; d <= au; d = R.ajouterJours(d, 1)) {
-    const a = R.analyserJour(EPJ[d] || []), abs = R.absencePour(S.abs, d), plan = R.agendaPour(S.versions, d);
+    const a = R.analyserJour(EPJ[d] || []), abs = R.absencePour(S.abs, d);
     if (abs && R.jourOuvre(S.versions, d)) abd++;
-    tot += a.travail; prevu += abs ? 0 : R.minutesPrevues(plan);
+    tot += a.travail;
     if (a.vide && !abs) continue;
-    rows += `<tr class="border-t border-slate-100 cursor-pointer hover:bg-slate-50" onclick="dlgJour('${d}')"><td class="py-2 whitespace-nowrap">${fd(d)}</td>
-      <td>${abs ? esc(abs.type) : plagesTxt(a.plages)}</td><td class="text-xs text-slate-500">${agendaTxt(plan)}</td><td class="text-right font-semibold">${a.vide ? '–' : R.duree(a.travail)}</td></tr>`;
+    rows += `<tr class="border-t border-slate-100"><td class="py-2 whitespace-nowrap">${fd(d)}</td>
+      <td>${abs ? esc(abs.type) : plagesTxt(a.plages)}${!a.vide && !a.complet && d < auj() ? ' <span class="text-xs text-amber-700">incomplet</span>' : ''}</td>
+      <td class="text-xs text-slate-500">${a.pauses.length ? plagesTxt(a.pauses) : ''}</td>
+      <td class="text-right font-semibold">${a.vide ? '–' : R.duree(a.travail)}</td>
+      <td class="pl-2"><button class="text-teal-700" title="Voir ou corriger" onclick="dlgJour('${d}')">✎</button></td></tr>`;
   }
   const al = R.alertes({ evtsParJour: EPJ, absences: S.abs, versions: S.versions, params: P, du, au, aujourdhui: auj() });
-  const nbDep = al.filter(x => x.niveau === 'depassement').length;
   const wks = [];
   for (let l = R.lundi(du); l <= au; l = R.ajouterJours(l, 7)) {
     const s = R.semaine({ lundi: l, evtsParJour: EPJ, absences: S.abs, versions: S.versions, params: P });
-    wks.push(`<tr class="border-t border-slate-100"><td class="py-1.5">Sem. du ${fd(l)}</td><td class="text-right font-semibold">${R.duree(s.travail)}</td><td class="text-right text-slate-500">${R.duree(s.prevu)}</td><td class="text-right text-slate-500">${R.duree(s.attendu)}</td><td class="text-right ${s.heuresSup ? 'text-rose-700' : 'text-slate-400'}">${s.heuresSup ? '+' + R.duree(s.heuresSup) : '–'}</td></tr>`);
+    wks.push(`<div class="flex justify-between text-sm border-t border-slate-100 py-1.5"><span>Sem. du ${fd(l)}</span><span class="font-semibold">${R.duree(s.travail)} <span class="text-xs font-normal text-slate-400">/ ${R.duree(s.attendu)}</span>${s.heuresSup ? ` <span class="text-xs font-normal text-rose-700">(+${R.duree(s.heuresSup)} sup.)</span>` : ''}</span></div>`);
   }
+  const absMois = S.abs.filter(a => a.au >= du && a.du <= au).sort((a, b) => b.du.localeCompare(a.du));
   return `<section class="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
-   <div class="max-w-xs"><label>Mois</label><input type="month" value="${S.mois}" onchange="choisirMois(this.value)"></div>
-   <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-     <div class="rounded-xl bg-teal-50 p-3"><div class="text-xs text-slate-500">Travaillé</div><div class="text-xl font-bold text-teal-700">${R.duree(tot)}</div></div>
-     <div class="rounded-xl bg-slate-50 p-3"><div class="text-xs text-slate-500">Prévu (agenda)</div><div class="text-xl font-bold">${R.duree(prevu)}</div></div>
-     <div class="rounded-xl bg-violet-50 p-3"><div class="text-xs text-slate-500">Jours d’absence</div><div class="text-xl font-bold text-violet-700">${abd}</div></div>
-     <div class="rounded-xl ${nbDep ? 'bg-rose-50' : 'bg-emerald-50'} p-3 cursor-pointer" onclick="setTab('alertes')"><div class="text-xs text-slate-500">Dépassements</div><div class="text-xl font-bold ${nbDep ? 'text-rose-700' : 'text-emerald-700'}">${nbDep}</div></div></div>
-   <div class="overflow-x-auto"><h3 class="font-semibold mb-1">Heures par semaine</h3><table class="w-full text-sm">
-     <tr class="text-xs text-slate-500"><th></th><th class="text-right font-medium">Travaillé</th><th class="text-right font-medium">Prévu</th><th class="text-right font-medium">Contrat</th><th class="text-right font-medium">Heures sup</th></tr>${wks.join('')}</table></div>
-   <div class="overflow-x-auto"><h3 class="font-semibold mb-1">Détail</h3><table class="w-full text-sm">
-     <tr class="text-xs text-slate-500 text-left"><th class="font-medium">Jour</th><th class="font-medium">Réalisé</th><th class="font-medium">Prévu</th><th class="font-medium text-right">Durée</th></tr>
-     ${rows || '<tr><td class="text-slate-400 py-2" colspan="4">Aucune donnée ce mois-ci.</td></tr>'}</table></div>
-   <div class="border-t border-slate-200 pt-4">
-     <h3 class="font-semibold mb-2">Exporter</h3>
-     <div class="grid grid-cols-2 gap-3 mb-3"><div><label>Du</label><input id="x-du" type="date" value="${S.du}"></div><div><label>Au</label><input id="x-au" type="date" value="${S.au}"></div></div>
-     <div class="grid grid-cols-3 gap-2">
-       <button class="btn bg-teal-600 text-white" onclick="exporter('pdf')">PDF</button>
-       <button class="btn bg-slate-100" onclick="exporter('csv-heures')">CSV heures</button>
-       <button class="btn bg-slate-100" onclick="exporter('csv-journal')">CSV saisies</button></div>
-     <p class="text-xs text-slate-400 mt-2">Le PDF contient le relevé des heures, les alertes, puis sur une page séparée le journal des saisies et des modifications.</p>
-   </div></section>`;
-}
-
-// ---------------------------------------------------------------------------
-// Alertes (responsable)
-// ---------------------------------------------------------------------------
-function vAlertes() {
-  const { du, au } = bornesMois(S.mois), P = params();
-  const al = R.alertes({ evtsParJour: evtsParJour(), absences: S.abs, versions: S.versions, params: P, du, au, aujourdhui: auj() });
-  const groupe = (niv, titre, coul) => {
-    const l = al.filter(x => x.niveau === niv);
-    return `<h3 class="font-semibold mt-4 mb-1 ${coul}">${titre} (${l.length})</h3>${l.length ? l.map(x => `<div class="border-t border-slate-100 py-2 text-sm cursor-pointer hover:bg-slate-50" onclick="dlgJour('${x.jour}')">
-      <div class="text-xs text-slate-500">${fd(x.jour)} · ${esc(R.LIBELLES_REGLES[x.regle])}</div>${esc(x.message)}</div>`).join('') : '<p class="text-sm text-slate-400">Aucune.</p>'}`;
-  };
-  return `<section class="bg-white rounded-2xl border border-slate-200 p-4">
-   <div class="max-w-xs"><label>Mois</label><input type="month" value="${S.mois}" onchange="choisirMois(this.value)"></div>
-   ${groupe('depassement', 'Dépassements des règles légales', 'text-rose-700')}
-   ${groupe('ecart', 'Écarts avec l’agenda type', 'text-amber-700')}
-   ${groupe('info', 'Pour information', 'text-sky-700')}
-   <p class="text-xs text-slate-400 mt-4">Règles contrôlées : repos quotidien de ${R.duree(P.repos_quotidien_min)}, ${R.duree(P.max_jour_min)} au plus par jour, pause de ${P.pause_duree_min} min dès ${R.duree(P.pause_seuil_min)} de travail, ${R.duree(P.max_semaine_min)} au plus par semaine, ${R.duree(P.moyenne_12s_min)} en moyenne sur 12 semaines, repos hebdomadaire de ${R.duree(P.repos_hebdo_min)}. Les règles hebdomadaires portent sur les semaines terminées.</p>
+   ${choixPersonne(true)}
+   <div class="grid grid-cols-2 gap-2 text-center">
+     <div class="rounded-xl bg-teal-50 p-3"><div class="text-xs text-slate-500">Total du mois</div><div class="text-xl font-bold text-teal-700">${R.duree(tot)}</div></div>
+     <div class="rounded-xl bg-violet-50 p-3"><div class="text-xs text-slate-500">Jours d’absence</div><div class="text-xl font-bold text-violet-700">${abd}</div></div></div>
+   ${encartPoints(al)}
+   <div><h3 class="font-semibold mb-1">Heures par semaine</h3>${wks.join('')}</div>
+   <div class="overflow-x-auto"><h3 class="font-semibold mb-1">Détail</h3><table class="w-full text-sm">${rows || '<tr><td class="text-slate-400">Aucune donnée ce mois-ci.</td></tr>'}</table></div>
+   <div><h3 class="font-semibold mb-1">Absences</h3>${absList(absMois)}</div>
+   <div class="border-t border-slate-200 pt-4 grid grid-cols-2 gap-2">
+    <button class="btn bg-slate-100" onclick="dlgExport()">Exporter</button>
+    <button class="btn bg-slate-100" onclick="ouvrirReglages()">Réglages</button></div>
   </section>`;
 }
 
+/** Encart « Points à vérifier » : n'apparaît que s'il y a des dépassements ou des écarts ; se déplie au clic. */
+function encartPoints(al) {
+  const dep = al.filter(x => x.niveau === 'depassement'), ecarts = al.filter(x => x.niveau === 'ecart');
+  if (!dep.length && !ecarts.length) return '';
+  const ligne = x => `<div class="border-t border-slate-100 py-2 text-sm cursor-pointer" onclick="dlgJour('${x.jour}')"><div class="text-xs text-slate-500">${fd(x.jour)} · ${esc(R.LIBELLES_REGLES[x.regle])}</div>${esc(x.message)}</div>`;
+  const P = params();
+  return `<details class="rounded-xl border ${dep.length ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'} px-3 py-2">
+    <summary class="cursor-pointer text-sm font-semibold ${dep.length ? 'text-rose-700' : 'text-amber-800'}">Points à vérifier : ${[dep.length && dep.length + ' dépassement' + (dep.length > 1 ? 's' : ''), ecarts.length && ecarts.length + ' écart' + (ecarts.length > 1 ? 's' : '') + ' avec l’agenda type'].filter(Boolean).join(', ')}</summary>
+    <div class="mt-2 bg-white rounded-lg px-3">${[...dep, ...ecarts].map(ligne).join('')}</div>
+    <p class="text-xs text-slate-500 mt-2">Règles contrôlées : repos quotidien de ${R.duree(P.repos_quotidien_min)}, ${R.duree(P.max_jour_min)} au plus par jour, pause de ${P.pause_duree_min} min dès ${R.duree(P.pause_seuil_min)}, ${R.duree(P.max_semaine_min)} au plus par semaine, ${R.duree(P.moyenne_12s_min)} en moyenne sur 12 semaines, repos hebdomadaire de ${R.duree(P.repos_hebdo_min)}.</p>
+  </details>`;
+}
+
+function dlgExport() {
+  openDlg(`<h3 class="font-bold mb-1">Exporter les heures de ${esc(nom(S.sel))}</h3>
+   <p class="text-xs text-slate-500 mb-3">Le PDF contient le relevé, les alertes et, sur une page séparée, le journal des saisies et des modifications.</p>
+   <div class="grid grid-cols-2 gap-3 mb-3"><div><label>Du</label><input id="x-du" type="date" value="${S.du}"></div><div><label>Au</label><input id="x-au" type="date" value="${S.au}"></div></div>
+   <div class="grid grid-cols-3 gap-2">
+     <button class="btn bg-teal-600 text-white" onclick="exporter('pdf')">PDF</button>
+     <button class="btn bg-slate-100" onclick="exporter('csv-heures')">CSV heures</button>
+     <button class="btn bg-slate-100" onclick="exporter('csv-journal')">CSV saisies</button></div>
+   <button class="btn bg-slate-100 w-full mt-3" onclick="closeDlg()">Fermer</button>`);
+}
+
 // ---------------------------------------------------------------------------
+// Réglages : tout ce qui sert rarement, réuni derrière un bouton
+// ---------------------------------------------------------------------------
+function ouvrirReglages(sous) {
+  S.sous = sous || S.sous || 'contrat'; S.tab = 'reglages'; S.jrDu = undefined; S.jrAdmin = undefined; render();
+}
+function vReglages() {
+  const rubriques = [['contrat', 'Contrat et agenda type'], ['journal', 'Journal']];
+  if (S.moi.admin) rubriques.push(['personnes', 'Personnes et employeurs'], ['regles', 'Règles légales']);
+  if (!rubriques.find(r => r[0] === S.sous)) S.sous = 'contrat';
+  const nav = rubriques.map(([k, l]) => `<button onclick="ouvrirReglages('${k}')" class="rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ${S.sous === k ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}">${l}</button>`).join('');
+  const parPersonne = S.sous === 'contrat' || S.sous === 'journal';
+  let contenu;
+  if (parPersonne && !S.sel) contenu = `<section class="bg-white rounded-2xl border border-slate-200 p-4 text-sm">Aucun salarié n’est encore rattaché.${S.moi.admin ? ' Invitez une personne dans « Personnes et employeurs ».' : ''}</section>`;
+  else contenu = { contrat: vContrat, journal: vJournal, personnes: vPersonnes, regles: vRegles }[S.sous]();
+  return `<div class="flex items-center justify-between mb-3"><h2 class="font-semibold text-lg">Réglages</h2>
+     <button class="text-sm underline text-slate-500" onclick="setTab('suivi')">Retour au suivi</button></div>
+   <div class="flex gap-1 mb-3 overflow-x-auto">${nav}</div>
+   ${parPersonne && S.sel ? `<div class="bg-white rounded-2xl border border-slate-200 p-4 mb-3">${choixPersonne(false)}</div>` : ''}
+   ${contenu}`;
+}
+
+// ---------------------------------------------------------------------------
+// Contrat et agenda type// ---------------------------------------------------------------------------
 // Contrat et agenda type (responsable)
 // ---------------------------------------------------------------------------
 let brouillon = null;
@@ -593,7 +620,14 @@ const CHAMPS_REGLES = [
   ['alerte_employeur_h', 'Alerte au responsable après (heures de retard)'], ['conservation_annees', 'Durée de conservation (années)'],
 ];
 const optsEmp = (sel = '') => S.employeurs.filter(e => e.actif).map(e => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.nom)}</option>`).join('');
-function vAdmin() {
+function vRegles() {
+  return `<section class="bg-white rounded-2xl border border-slate-200 p-4">
+   <h2 class="font-semibold mb-1">Règles légales</h2>
+   <p class="text-xs text-slate-500 mb-3">Communes à tous les employeurs. Un dépassement est signalé, jamais bloqué.</p>
+   <div class="grid sm:grid-cols-2 gap-3">${CHAMPS_REGLES.map(([k, l]) => `<div><label>${l}</label><input id="p-${k}" type="number" step="any" value="${esc(S.params[k])}"></div>`).join('')}</div>
+   <button class="btn bg-teal-600 text-white w-full mt-3" onclick="enregistrerRegles()">Enregistrer les règles</button></section>`;
+}
+function vPersonnes() {
   if (S.jrAdmin === undefined) setTimeout(chargerJournalAdmin);
   const personnes = S.profils.map(p => {
     const ms = S.membres.filter(m => m.profil === p.id);
@@ -624,17 +658,13 @@ function vAdmin() {
        <button class="text-xs underline text-teal-700" onclick="dlgEmployeur('${e.id}')">Modifier</button></div>`).join('')}
      <button class="btn bg-slate-100 w-full mt-2" onclick="dlgEmployeur('')">Ajouter un employeur</button></div>
 
-   <div><h2 class="font-semibold mb-2">Règles légales (communes à tous)</h2>
-     <div class="grid sm:grid-cols-2 gap-3">${CHAMPS_REGLES.map(([k, l]) => `<div><label>${l}</label><input id="p-${k}" type="number" step="any" value="${esc(S.params[k])}"></div>`).join('')}</div>
-     <button class="btn bg-teal-600 text-white w-full mt-3" onclick="enregistrerRegles()">Enregistrer les règles</button></div>
-
    <div><h2 class="font-semibold mb-1">Journal d’administration</h2>${S.jrAdmin === undefined ? '<p class="text-sm text-slate-400">Chargement…</p>' : lignesJournal(S.jrAdmin)}</div>
   </section>`;
 }
 async function chargerJournalAdmin() {
   const { data, error } = await sb.from('journal').select('*').in('table_nom', ['employeurs', 'membres', 'profils', 'parametres', 'comptes', 'purge']).order('le', { ascending: false }).limit(50);
   if (error) return erreur(error);
-  S.jrAdmin = data; if (S.tab === 'admin') render();
+  S.jrAdmin = data; if (S.tab === 'reglages') render();
 }
 async function apresAdmin(msg) { await chargerOrganisation(); S.jrAdmin = undefined; render(); if (msg) alert(msg); }
 async function inviter() {
@@ -811,6 +841,7 @@ Object.assign(window, {
   S, R, seConnecter, mdpOublie, enregistrerMdp, seDeconnecter, setTab, choisirEmployeur, choisirSalarie, render, closeDlg,
   pointer, dlgJour, ajouterEvt, annulerEvt, semainePrec, ajouterAbs, annulerAbs, choisirMois,
   majPlage, suppPlage, ajoutPlage, enregistrerAgenda, enregistrerContrat, chargerJournal, exporter,
+  dlgExport, ouvrirReglages,
   inviter, dlgRattacher, rattacher, finResponsable, basculerActif, dlgEmployeur, enregistrerEmployeur, enregistrerRegles,
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.moi && S.sel) recharger(); });
