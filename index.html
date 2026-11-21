@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pointage du cabinet</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pointage">
+<meta name="theme-color" content="#0f766e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<style>
+:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:#f8fafc;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+dialog{border:0;border-radius:1rem;padding:0;max-width:94vw;width:30rem}
+dialog::backdrop{background:rgba(15,23,42,.45)}
+.btn{border-radius:.9rem;font-weight:600;padding:.8rem 1rem;transition:.15s}
+.btn:disabled{opacity:.35}
+input,select,textarea{border:1px solid #cbd5e1;border-radius:.6rem;padding:.55rem .7rem;width:100%;background:#fff}
+input:disabled{background:#f1f5f9;color:#64748b}
+label{font-size:.8rem;color:#475569;font-weight:500}
+.barre{text-decoration:line-through;color:#94a3b8}
+td,th{vertical-align:top}
+</style>
+</head>
+<body class="text-slate-800">
+<div class="max-w-3xl mx-auto p-4 pb-24">
+  <header class="flex items-center justify-between gap-3 mb-4">
+    <div>
+      <h1 class="text-xl font-bold text-teal-700">🦷 Pointage du cabinet</h1>
+      <p id="today" class="text-sm text-slate-500"></p><p id="sync" class="text-xs text-emerald-600"></p>
+    </div>
+    <div id="compte" class="text-right text-sm"></div>
+  </header>
+  <div id="banner"></div>
+  <nav id="tabs" class="flex gap-1 mb-4 overflow-x-auto"></nav>
+  <div id="choix"></div>
+  <main id="view"><p class="text-slate-500">Chargement…</p></main>
+</div>
+<dialog id="dlg"><div id="dlgc" class="p-5"></div></dialog>
+<script type="module" src="app.js"></script>
+</body>
+</html>

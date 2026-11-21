@@ -1,0 +1,6 @@
+[functions.rappels]
+verify_jwt = false
+
+# Vérifie elle-même que l'appelant est administrateur
+[functions.comptes]
+verify_jwt = false
